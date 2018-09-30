@@ -1,0 +1,86 @@
+---
+title: "Prediction Assignment"
+author: "Dan Berd"
+date: "9/30/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+##Background 
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+#Exploritary Data Analysis
+Let's first load the data and make some exploration.
+```{r}
+data<-read.csv("data/pml-training.csv")
+
+dim(data)
+```
+Since there are 160 columns. I won't print first rows of the data. We can instead make summary and see what data consists of.
+```{r}
+str(data)
+```
+Let's load packages that we will use for this project
+```{r message=F, warning=F}
+library(caret)
+library(randomForest)
+library(rpart)
+library(rpart.plot)
+```
+
+##Cleaning Data
+Now let's get rid off columns that we won't use for prediction
+```{r}
+remove <- grep("name|timestamp|window|X", colnames(data), value=F) 
+data<-data[,-remove]
+```
+And let's remove columns that have a lot of NAs, if column has more than 80 NA we will remove this column
+```{r}
+data[data==""]<-NA
+NArate <- apply(data, 2, function(x) sum(is.na(x)))/nrow(data)
+data <- data[!(NArate>0.80)]
+```
+##Cross-Validation
+And now let's divide our dataset to train and test set
+```{r}
+train<-createDataPartition(y = data$classe, p=0.8, list = F)
+train_data<-data[train,]
+test_data<-data[-train,]
+```
+
+##Interpreting Decision Tree
+Let's first predict with Decision Tree and see the interpration
+```{r}
+tree <- rpart(classe ~ ., data=train_data, method="class")
+rpart.plot(tree, main="Classification Tree", extra=102, under=TRUE, faclen=0)
+```
+
+
+We can see interpation of decision tree looking at the plot, but the algorithm won't fit very well on the data set, because desicion trees are known for overfitting the data, and the best method to make it overfit less are Random Forests, Random Forest are known to be better than Bootstrap Aggregating also, because Random Forests use random predictors (usually the number of predictors is sqrt(n)). So let's use it for prediction
+
+```{r}
+set.seed(132)
+rffit<-randomForest(classe~., data=train_data, do.trace = F)
+print(rffit)
+```
+
+We can see that on training data our model is incredibly accurate
+Let's look at importance of each predictor
+```{r}
+importance(rffit)
+```
+
+##Check with test data
+```{r}
+confusionMatrix(test_data$classe,predict(rffit,test_data[,1:52]))
+```
+We can see that on the test set prediction was incredibly precise too. 
+Now let's predict on the real data given by coursera.com
+I created a file in other script, so the results can be viewed here.
+```{r}
+check_data<-read.csv("data/pml-testing.csv")
+check_data<-check_data[,(names(check_data) %in% names(train_data))]
+predict(rffit, check_data)
+```
